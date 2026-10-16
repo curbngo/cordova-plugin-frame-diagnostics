@@ -12,10 +12,4 @@ cordova plugin add https://github.com/curbngo/cordova-plugin-frame-diagnostics
 
 - Android
 
-## Usage
-
-```javascript
-cordova.plugins.frameDiagnostics.start();
-```
-
-Samples are written to logcat under the tag `FrameDiag`.
+The plugin starts on its own when the page is ready. It starts again after a reload. Samples are written to logcat under the tag `FrameDiag`.

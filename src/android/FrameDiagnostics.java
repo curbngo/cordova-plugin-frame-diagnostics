@@ -29,13 +29,12 @@ public class FrameDiagnostics extends CordovaPlugin {
     private static final long SAMPLE_PERIOD_MS = 3000;
     private static final long CALLBACK_TIMEOUT_MS = 1500;
     // Top-left of the existing page. Nothing is drawn there for this sample.
-    private static final int MARKER_CSS_PX = 32;
+    private static final int SAMPLE_CSS_PX = 32;
 
     private static final String READ_JS =
         "(function(){var d=window.__cngFrameDiag||{};return JSON.stringify({" +
             "intervalSeq:d.intervalSeq||0,intervalTs:d.intervalTs||0," +
             "rafSeq:d.rafSeq||0,rafTs:d.rafTs||0," +
-            "markerSeq:d.markerSeq||0,markerTs:d.markerTs||0," +
             "visibility:(document.visibilityState||'')" +
         "});})()";
 
@@ -180,8 +179,6 @@ public class FrameDiagnostics extends CordovaPlugin {
                     eval.put("intervalTs", body.optLong("intervalTs"));
                     eval.put("rafSeq", body.optLong("rafSeq"));
                     eval.put("rafTs", body.optLong("rafTs"));
-                    eval.put("markerSeq", body.optLong("markerSeq"));
-                    eval.put("markerTs", body.optLong("markerTs"));
                     eval.put("visibility", body.optString("visibility"));
                 } catch (JSONException e) {
                     put(eval, "ok", false);
@@ -213,7 +210,7 @@ public class FrameDiagnostics extends CordovaPlugin {
         Bitmap bitmap = null;
         Runnable copyTimeout = null;
         try {
-        final Rect rect = markerRect(page);
+        final Rect rect = sampleRect(page);
         bitmap = Bitmap.createBitmap(rect.width(), rect.height(), Bitmap.Config.ARGB_8888);
         final Bitmap copied = bitmap;
         put(copy, "rectLeft", rect.left);
@@ -294,11 +291,11 @@ public class FrameDiagnostics extends CordovaPlugin {
         }
     }
 
-    private Rect markerRect(View page) {
+    private Rect sampleRect(View page) {
         int[] loc = new int[2];
         page.getLocationOnScreen(loc);
         float density = page.getResources().getDisplayMetrics().density;
-        int size = Math.max(1, Math.round(MARKER_CSS_PX * density));
+        int size = Math.max(1, Math.round(SAMPLE_CSS_PX * density));
         Rect rect = new Rect(loc[0], loc[1], loc[0] + size, loc[1] + size);
         View root = cordova.getActivity().getWindow().getDecorView();
         if (rect.right > root.getWidth()) {
