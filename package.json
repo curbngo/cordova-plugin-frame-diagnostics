@@ -1,0 +1,19 @@
+{
+  "name": "cordova-plugin-frame-diagnostics",
+  "version": "1.0.0",
+  "description": "Read-only frame samples for the kiosk WebView. Does not reload or replace the WebView.",
+  "cordova": {
+    "id": "cordova-plugin-frame-diagnostics",
+    "platforms": [
+      "android"
+    ]
+  },
+  "keywords": [
+    "cordova",
+    "plugin",
+    "webview",
+    "diagnostics"
+  ],
+  "author": "Monish Overlander",
+  "license": "Apache-2.0"
+}
