@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" id="cordova-plugin-frame-diagnostics" version="1.0.0">
     <name>FrameDiagnostics</name>
-    <description>Read-only frame samples for the kiosk WebView.</description>
+    <description>Read-only frame samples for a Cordova WebView.</description>
     <license>Apache 2.0</license>
     <js-module src="www/frame-diagnostics.js" name="frameDiagnostics">
         <clobbers target="cordova.plugins.frameDiagnostics" />
@@ -9,10 +9,10 @@
     <platform name="android">
         <config-file target="res/xml/config.xml" parent="/*">
             <feature name="FrameDiagnostics">
-                <param name="android-package" value="com.curbngo.kiosk.framediagnostics.FrameDiagnostics" />
+                <param name="android-package" value="com.curbngo.framediagnostics.FrameDiagnostics" />
                 <param name="onload" value="false" />
             </feature>
         </config-file>
-        <source-file src="src/android/FrameDiagnostics.java" target-dir="src/com/curbngo/kiosk/framediagnostics" />
+        <source-file src="src/android/FrameDiagnostics.java" target-dir="src/com/curbngo/framediagnostics" />
     </platform>
 </plugin>

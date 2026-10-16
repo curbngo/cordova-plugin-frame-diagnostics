@@ -1,4 +1,4 @@
-package com.curbngo.kiosk.framediagnostics;
+package com.curbngo.framediagnostics;
 
 import android.graphics.Bitmap;
 import android.graphics.Rect;
