@@ -32,7 +32,7 @@ function start(success, error) {
 }
 
 // Runs again after a page reload, because Cordova loads this module with the new document.
-channel.deviceready.subscribe(function () {
+channel.onDeviceReady.subscribe(function () {
     start();
 });
 
