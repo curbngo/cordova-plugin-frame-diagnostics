@@ -145,10 +145,16 @@ public class FrameDiagnostics extends CordovaPlugin {
         final Runnable evalTimeout = new Runnable() {
             @Override
             public void run() {
-                if (evalDone.compareAndSet(false, true)) {
-                    putLong(eval, "latencyMs", SystemClock.elapsedRealtime() - evalStart);
-                    put(eval, "timedOut", true);
-                    put(eval, "ok", false);
+                boolean won;
+                synchronized (eval) {
+                    won = evalDone.compareAndSet(false, true);
+                    if (won) {
+                        putLong(eval, "latencyMs", SystemClock.elapsedRealtime() - evalStart);
+                        put(eval, "timedOut", true);
+                        put(eval, "ok", false);
+                    }
+                }
+                if (won) {
                     maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
                 }
             }
@@ -161,47 +167,60 @@ public class FrameDiagnostics extends CordovaPlugin {
         page.evaluateJavascript(READ_JS, new android.webkit.ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
-                if (!evalDone.compareAndSet(false, true)) {
-                    return;
+                boolean won;
+                synchronized (eval) {
+                    won = evalDone.compareAndSet(false, true);
+                    if (won) {
+                        if (worker != null) {
+                            worker.removeCallbacks(evalTimeout);
+                        }
+                        putLong(eval, "latencyMs", SystemClock.elapsedRealtime() - evalStart);
+                        put(eval, "ok", true);
+                        put(eval, "timedOut", false);
+                        if (value != null && value.length() >= 2 && value.charAt(0) == '"') {
+                            value = value.substring(1, value.length() - 1).replace("\\\"", "\"");
+                        }
+                        try {
+                            JSONObject body = new JSONObject(value == null ? "{}" : value);
+                            eval.put("intervalSeq", body.optLong("intervalSeq"));
+                            eval.put("intervalTs", body.optLong("intervalTs"));
+                            eval.put("rafSeq", body.optLong("rafSeq"));
+                            eval.put("rafTs", body.optLong("rafTs"));
+                            eval.put("visibility", body.optString("visibility"));
+                        } catch (JSONException e) {
+                            put(eval, "ok", false);
+                            put(eval, "parseError", true);
+                        }
+                    }
                 }
-                if (worker != null) {
-                    worker.removeCallbacks(evalTimeout);
+                if (won) {
+                    maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
                 }
-                putLong(eval, "latencyMs", SystemClock.elapsedRealtime() - evalStart);
-                put(eval, "ok", true);
-                put(eval, "timedOut", false);
-                if (value != null && value.length() >= 2 && value.charAt(0) == '"') {
-                    value = value.substring(1, value.length() - 1).replace("\\\"", "\"");
-                }
-                try {
-                    JSONObject body = new JSONObject(value == null ? "{}" : value);
-                    eval.put("intervalSeq", body.optLong("intervalSeq"));
-                    eval.put("intervalTs", body.optLong("intervalTs"));
-                    eval.put("rafSeq", body.optLong("rafSeq"));
-                    eval.put("rafTs", body.optLong("rafTs"));
-                    eval.put("visibility", body.optString("visibility"));
-                } catch (JSONException e) {
-                    put(eval, "ok", false);
-                    put(eval, "parseError", true);
-                }
-                maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
             }
         });
         } catch (Throwable t) {
             if (worker != null) {
                 worker.removeCallbacks(evalTimeout);
             }
-            if (evalDone.compareAndSet(false, true)) {
-                put(eval, "ok", false);
-                put(eval, "reason", "page");
+            boolean won;
+            synchronized (eval) {
+                won = evalDone.compareAndSet(false, true);
+                if (won) {
+                    put(eval, "ok", false);
+                    put(eval, "reason", "page");
+                }
+            }
+            if (won) {
                 maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
             }
         }
 
         if (!resumed || Build.VERSION.SDK_INT < 26) {
-            put(copy, "skipped", true);
-            put(copy, "reason", !resumed ? "paused" : "api");
-            copyDone.set(true);
+            synchronized (copy) {
+                put(copy, "skipped", true);
+                put(copy, "reason", !resumed ? "paused" : "api");
+                copyDone.set(true);
+            }
             maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
             return;
         }
@@ -221,9 +240,15 @@ public class FrameDiagnostics extends CordovaPlugin {
         copyTimeout = new Runnable() {
             @Override
             public void run() {
-                if (copyDone.compareAndSet(false, true)) {
-                    putLong(copy, "latencyMs", SystemClock.elapsedRealtime() - copyStart);
-                    put(copy, "timedOut", true);
+                boolean won;
+                synchronized (copy) {
+                    won = copyDone.compareAndSet(false, true);
+                    if (won) {
+                        putLong(copy, "latencyMs", SystemClock.elapsedRealtime() - copyStart);
+                        put(copy, "timedOut", true);
+                    }
+                }
+                if (won) {
                     maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
                 }
             }
@@ -243,35 +268,39 @@ public class FrameDiagnostics extends CordovaPlugin {
                 worker.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (!copyDone.compareAndSet(false, true)) {
-                            if (!copied.isRecycled()) {
-                                copied.recycle();
-                            }
-                            return;
-                        }
-                        worker.removeCallbacks(copyTimeoutTask);
-                        putLong(copy, "latencyMs", SystemClock.elapsedRealtime() - copyStart);
-                        put(copy, "code", resultCode);
-                        put(copy, "codeName", codeName(resultCode));
-                        if (resultCode == PixelCopy.SUCCESS && !copied.isRecycled()) {
-                            int[] pixels = new int[copied.getWidth() * copied.getHeight()];
-                            copied.getPixels(pixels, 0, copied.getWidth(), 0, 0, copied.getWidth(), copied.getHeight());
-                            long checksum = 0;
-                            boolean black = pixels.length > 0;
-                            for (int pixel : pixels) {
-                                checksum = (checksum * 1315423911L) ^ (pixel & 0xffffffffL);
-                                int r = (pixel >> 16) & 0xff;
-                                int g = (pixel >> 8) & 0xff;
-                                int b = pixel & 0xff;
-                                if (r > 8 || g > 8 || b > 8) {
-                                    black = false;
+                        boolean won;
+                        synchronized (copy) {
+                            won = copyDone.compareAndSet(false, true);
+                            if (won) {
+                                worker.removeCallbacks(copyTimeoutTask);
+                                putLong(copy, "latencyMs", SystemClock.elapsedRealtime() - copyStart);
+                                put(copy, "code", resultCode);
+                                put(copy, "codeName", codeName(resultCode));
+                                if (resultCode == PixelCopy.SUCCESS && !copied.isRecycled()) {
+                                    int[] pixels = new int[copied.getWidth() * copied.getHeight()];
+                                    copied.getPixels(pixels, 0, copied.getWidth(), 0, 0, copied.getWidth(), copied.getHeight());
+                                    long checksum = 0;
+                                    boolean black = pixels.length > 0;
+                                    for (int pixel : pixels) {
+                                        checksum = (checksum * 1315423911L) ^ (pixel & 0xffffffffL);
+                                        int r = (pixel >> 16) & 0xff;
+                                        int g = (pixel >> 8) & 0xff;
+                                        int b = pixel & 0xff;
+                                        if (r > 8 || g > 8 || b > 8) {
+                                            black = false;
+                                        }
+                                    }
+                                    putLong(copy, "checksum", checksum);
+                                    put(copy, "black", black);
                                 }
                             }
-                            putLong(copy, "checksum", checksum);
-                            put(copy, "black", black);
                         }
-                        copied.recycle();
-                        maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
+                        if (!copied.isRecycled()) {
+                            copied.recycle();
+                        }
+                        if (won) {
+                            maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
+                        }
                     }
                 });
             }
@@ -283,9 +312,15 @@ public class FrameDiagnostics extends CordovaPlugin {
             if (bitmap != null && !bitmap.isRecycled()) {
                 bitmap.recycle();
             }
-            if (copyDone.compareAndSet(false, true)) {
-                put(copy, "ok", false);
-                put(copy, "reason", "page");
+            boolean won;
+            synchronized (copy) {
+                won = copyDone.compareAndSet(false, true);
+                if (won) {
+                    put(copy, "ok", false);
+                    put(copy, "reason", "page");
+                }
+            }
+            if (won) {
                 maybeFinish(sampleWall, resumed, eval, copy, evalDone, copyDone, reported);
             }
         }
@@ -321,10 +356,17 @@ public class FrameDiagnostics extends CordovaPlugin {
             JSONObject line = new JSONObject();
             line.put("wallTs", sampleWall);
             line.put("activityResumed", resumed);
-            line.put("eval", eval);
-            line.put("pixelCopy", copy);
-            Log.i(TAG, line.toString());
-        } catch (JSONException ignored) {
+            // Hold both maps until the string is built. The other sample thread
+            // writes its map, then calls maybeFinish only after releasing it.
+            synchronized (eval) {
+                synchronized (copy) {
+                    line.put("eval", eval);
+                    line.put("pixelCopy", copy);
+                    Log.i(TAG, line.toString());
+                }
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "sample report failed " + e.getClass().getSimpleName());
         }
         sampleInFlight.set(false);
     }
